@@ -38,7 +38,18 @@ function peerNet(c,hostMode){return new Promise((res,rej)=>{
     leave(){try{peer&&peer.destroy()}catch(e){}}};
   const t=setTimeout(()=>fail("Server online tidak merespons. Coba lagi."),12000);
   if(hostMode){
-    peer=new Peer(hostId,{config:{iceServers:ICE}});
+    peer = new Peer(hostId, {
+  config: { iceServers: ICE },
+  debug: 3
+});
+
+peer.on("error", e => {
+  console.error("[Typing Tower][HOST] Peer error:", e.type, e);
+});
+
+peer.on("disconnected", () => {
+  console.warn("[Typing Tower][HOST] Signaling disconnected");
+});
     peer.on("open",()=>{if(settled)return;settled=true;clearTimeout(t);roster[me.id]={...me};connOk=true;res(api)});
     peer.on("connection",cn=>{
       if(conns.filter(x=>x.open).length>=5){cn.on("open",()=>{cn.send({t:"full"});setTimeout(()=>cn.close(),400)});return}
@@ -48,9 +59,23 @@ function peerNet(c,hostMode){return new Promise((res,rej)=>{
       cn.on("close",()=>{conns=conns.filter(x=>x!==cn);if(cn._pid)delete roster[cn._pid];bcast()})});
     peer.on("error",e=>{if(!settled)fail(e.type==="unavailable-id"?"ID":"Tidak bisa terhubung ke server online ("+e.type+").");else{connOk=false;stLine()}});
   }else{
-    peer=new Peer({config:{iceServers:ICE}});
+    peer = new Peer({
+  config: { iceServers: ICE },
+  debug: 3
+});
+
+peer.on("error", e => {
+  console.error("[Typing Tower][CLIENT] Peer error:", e.type, e);
+});
+
+peer.on("disconnected", () => {
+  console.warn("[Typing Tower][CLIENT] Signaling disconnected");
+});
     peer.on("open",()=>{
       hconn=peer.connect(hostId,{reliable:true});
+      hconn.on("error", e => {
+  console.error("[Typing Tower][CLIENT] Connection error:", e);
+});
       hconn.on("open",()=>{if(settled)return;settled=true;clearTimeout(t);connOk=true;hconn.send({t:"p",d:{...me}});res(api)});
       hconn.on("data",m=>{if(m.t==="s"){list=m.l;sync()}else if(m.t==="full")gone("Room penuh (maksimal 6 pemain).")});
       hconn.on("close",()=>{if(settled)gone("Host keluar dari room.")})});
